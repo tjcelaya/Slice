@@ -1,12 +1,39 @@
 package com.user32.tjc.slice;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.URI;
+import java.util.Random;
+
+import org.apache.http.HttpResponse;
+import org.apache.http.ParseException;
+import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.entity.InputStreamEntity;
+import org.apache.http.entity.mime.MultipartEntity;
+import org.apache.http.entity.mime.MultipartEntityBuilder;
+import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.http.util.EntityUtils;
+import org.apache.http.entity.mime.HttpMultipartMode; 
+import org.apache.http.entity.mime.content.FileBody;
+import org.apache.http.entity.mime.content.InputStreamBody;
+import org.apache.http.entity.mime.content.StringBody;
+
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.MediaStore;
 import android.app.Activity;
+import android.app.FragmentManager;
 import android.app.ListActivity;
 import android.app.LoaderManager;
 import android.app.LoaderManager.LoaderCallbacks;
+import android.app.ProgressDialog;
 import android.content.CursorLoader;
 import android.content.Loader;
 import android.content.pm.PackageInfo;
@@ -28,6 +55,8 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 	private static CursorLoader CurLoader;
 	private static SimpleCursorAdapter mAdapter;
 	private Uri mediaContentUri;
+	private HttpClient httpc;
+	protected static ProgressDialog pd;
 	
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -35,6 +64,7 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 		setContentView(R.layout.activity_main);
 		mediaContentUri = MediaStore.Files.getContentUri("external");
 		LM = getLoaderManager();
+		httpc = new DefaultHttpClient();
 
 		
 		mAdapter = new SimpleCursorAdapter(this,
@@ -43,16 +73,6 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 				new String[] {MediaStore.Files.FileColumns.DISPLAY_NAME},
 				new int[] {android.R.id.text1},
 				0);  //flags not used with loadermanager
-//		
-//		for (PackageInfo pack : getPackageManager().getInstalledPackages(PackageManager.GET_PROVIDERS)) {
-//	        ProviderInfo[] providers = pack.providers;
-//	        if (providers != null) {
-//	            for (ProviderInfo provider : providers) {
-//	                Log.d(LOG_TAG, "provider: " + provider.authority);
-//	            }
-//	        }
-//	    }
-//		
 
 		setListAdapter(mAdapter);
 		LM.initLoader(1, null, this);
@@ -61,7 +81,79 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 
 	@Override
 	protected void onListItemClick(ListView l, View v, int position, long id) {
-		Toast.makeText(this, mediaContentUri+"/"+id, Toast.LENGTH_SHORT).show();
+		new UploadFile().execute(Uri.parse(mediaContentUri+"/"+id));
+	}
+	
+	private class UploadFile extends AsyncTask<Uri, Integer, Integer> {
+
+        private static final String UPLOAD_URL = "http://ww2.cs.fsu.edu/~celaya/upload.php";
+
+        @Override
+        protected void onPreExecute() {
+        	MainActivity.pd = new ProgressDialog(MainActivity.this);
+			pd.setTitle("Uploading...");
+			pd.setMessage("Pls wait.");
+			pd.setCancelable(false);
+			pd.setIndeterminate(true);
+			pd.show();
+        }
+
+		@SuppressWarnings("deprecation")
+		@Override
+        protected Integer doInBackground(Uri... contentUri) {
+
+			Random r = new Random();
+    		//TODO file upload goes here
+    	    HttpClient httpclient = new DefaultHttpClient();
+
+    	    HttpPost httppost = new HttpPost(UPLOAD_URL);
+
+    	    InputStream is = null;
+    	    HttpResponse response = null;
+    	    FileBody fb = null;
+    	    try {
+				MultipartEntityBuilder entity = MultipartEntityBuilder.create();
+//				entity.setMode(HttpMultipartMode.BROWSER_COMPATIBLE);
+//				httppost.addHeader("Content-Type", getContentResolver().getType(contentUri[0]));
+				entity.addPart("file", new InputStreamBody(getContentResolver().openInputStream(contentUri[0]), Integer.toHexString(r.hashCode())));
+//				entity.addPart("filename", new StringBody(Integer.toHexString(r.hashCode())));
+//				entity.addBinaryBody("file", 
+//						getContentResolver().openInputStream(contentUri[0])
+//						Integer.toHexString(r.hashCode())
+//						);
+				httppost.setEntity(entity.build());
+				response = httpclient.execute(httppost);
+    	    } catch (Exception e) {
+    	    	e.printStackTrace();
+    	    	Log.e(MainActivity.LOG_TAG, "error :(");
+    	    }
+    	    
+    	    if (response != null) {
+    	    	Log.w(MainActivity.LOG_TAG, response.getStatusLine().getReasonPhrase());
+    	    	try {
+					Log.w(MainActivity.LOG_TAG, EntityUtils.toString(response.getEntity()));
+				} catch (ParseException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+    	    }
+    	    //Do something with response...
+
+            return 1;
+        }
+
+        @Override
+        protected void onProgressUpdate(Integer... p) {}
+
+        @Override
+        protected void onPostExecute(Integer result) {
+        	if (MainActivity.pd != null) {
+        		pd.dismiss();
+        	}
+        }
 	}
 	
 	@Override
