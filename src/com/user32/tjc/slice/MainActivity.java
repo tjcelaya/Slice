@@ -27,14 +27,17 @@ import org.apache.http.entity.mime.content.StringBody;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Parcel;
 import android.provider.MediaStore;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.FragmentManager;
 import android.app.ListActivity;
 import android.app.LoaderManager;
 import android.app.LoaderManager.LoaderCallbacks;
 import android.app.ProgressDialog;
 import android.content.CursorLoader;
+import android.content.Intent;
 import android.content.Loader;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -44,6 +47,7 @@ import android.support.v4.widget.CursorAdapter;
 import android.util.Log;
 import android.view.Menu;
 import android.view.View;
+import android.webkit.MimeTypeMap;
 import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.SimpleCursorAdapter;
@@ -62,6 +66,17 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		setContentView(R.layout.activity_main);
+		
+		
+		Intent i = getIntent();
+		if (i != null) {
+			Uri p = i.getParcelableExtra(Intent.EXTRA_STREAM);
+			if (p != null) {
+				new UploadFile().execute(p);
+				
+			}
+		}
+		
 		mediaContentUri = MediaStore.Files.getContentUri("external");
 		LM = getLoaderManager();
 		httpc = new DefaultHttpClient();
@@ -84,9 +99,10 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 		new UploadFile().execute(Uri.parse(mediaContentUri+"/"+id));
 	}
 	
-	private class UploadFile extends AsyncTask<Uri, Integer, Integer> {
+	private class UploadFile extends AsyncTask<Uri, Integer, String> {
 
         private static final String UPLOAD_URL = "http://ww2.cs.fsu.edu/~celaya/upload.php";
+        private static final String SLICE_URL = "http://ww2.cs.fsu.edu/~celaya/slice/";
 
         @Override
         protected void onPreExecute() {
@@ -100,7 +116,7 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 
 		@SuppressWarnings("deprecation")
 		@Override
-        protected Integer doInBackground(Uri... contentUri) {
+        protected String doInBackground(Uri... contentUri) {
 
 			Random r = new Random();
     		//TODO file upload goes here
@@ -108,50 +124,85 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 
     	    HttpPost httppost = new HttpPost(UPLOAD_URL);
 
-    	    InputStream is = null;
     	    HttpResponse response = null;
-    	    FileBody fb = null;
+    	    String uploadedUrl = "";
     	    try {
 				MultipartEntityBuilder entity = MultipartEntityBuilder.create();
 //				entity.setMode(HttpMultipartMode.BROWSER_COMPATIBLE);
 //				httppost.addHeader("Content-Type", getContentResolver().getType(contentUri[0]));
-				entity.addPart("file", new InputStreamBody(getContentResolver().openInputStream(contentUri[0]), Integer.toHexString(r.hashCode())));
-//				entity.addPart("filename", new StringBody(Integer.toHexString(r.hashCode())));
-//				entity.addBinaryBody("file", 
-//						getContentResolver().openInputStream(contentUri[0])
-//						Integer.toHexString(r.hashCode())
-//						);
+				
+				uploadedUrl = Integer.toHexString(r.hashCode());
+						
+				entity.addPart("file", 
+						new InputStreamBody(
+								getContentResolver().openInputStream(contentUri[0]),
+								uploadedUrl
+								)
+				);
+				
+				Cursor cursor = getContentResolver().query(contentUri[0], new String[] { android.provider.MediaStore.Images.ImageColumns.DATA }, null, null, null);
+                cursor.moveToFirst();   
+                entity.addPart("fullpath", 
+                		new StringBody(
+                				cursor.getString(0)
+                				)
+                );
+                entity.addPart("filetype", 
+                		new StringBody(
+                				cursor.getString(0).replaceFirst("(.*)(\\.)(\\w+)$", "$2$3")
+                				)
+                );
+                
+                uploadedUrl += cursor.getString(0).replaceFirst("(.*)(\\.)(\\w+)$", "$2$3");
+                		
+				cursor.close();
+
 				httppost.setEntity(entity.build());
 				response = httpclient.execute(httppost);
     	    } catch (Exception e) {
     	    	e.printStackTrace();
     	    	Log.e(MainActivity.LOG_TAG, "error :(");
+    	    	uploadedUrl = "";
     	    }
     	    
     	    if (response != null) {
     	    	Log.w(MainActivity.LOG_TAG, response.getStatusLine().getReasonPhrase());
     	    	try {
-					Log.w(MainActivity.LOG_TAG, EntityUtils.toString(response.getEntity()));
-				} catch (ParseException e) {
-					// TODO Auto-generated catch block
-					e.printStackTrace();
-				} catch (IOException e) {
+					if (EntityUtils.toString(response.getEntity()).contains("Received"))
+	    	    		return SLICE_URL + uploadedUrl;
+
+				} catch (Exception e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
     	    }
-    	    //Do something with response...
-
-            return 1;
+    	    
+    	    return SLICE_URL;
+    	    	
         }
 
         @Override
         protected void onProgressUpdate(Integer... p) {}
 
         @Override
-        protected void onPostExecute(Integer result) {
+        protected void onPostExecute(String result) {
         	if (MainActivity.pd != null) {
         		pd.dismiss();
+        		if (result.equals(SLICE_URL)) {
+        			AlertDialog.Builder dBuilder = new AlertDialog.Builder(MainActivity.this);
+        	 
+        				// set title
+        			dBuilder.setTitle("Uh Oh");
+        				// set dialog message
+        			dBuilder.setMessage("There was a problem with your slice, your file may be too bPress Back to close.");
+        			dBuilder.create().show();
+        		} else {
+		        	Intent sendIntent = new Intent(Intent.ACTION_VIEW);
+		        	sendIntent.setType("vnd.android-dir/mms-sms");
+		        	sendIntent.putExtra("address", "");
+		        	sendIntent.putExtra("sms_body", result);
+		        	startActivity(sendIntent);
+        		}
         	}
         }
 	}
@@ -183,7 +234,7 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 				projection, 
 				MediaStore.Files.FileColumns.MEDIA_TYPE+" != 0",
 				null, 
-				null);
+				MediaStore.Files.FileColumns.DATE_ADDED+" DESC");
 		
 		return CurLoader;
 	}
