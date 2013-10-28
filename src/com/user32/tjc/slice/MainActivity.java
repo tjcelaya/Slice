@@ -1,37 +1,23 @@
 package com.user32.tjc.slice;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.net.URI;
+
 import java.util.Random;
 
 import org.apache.http.HttpResponse;
-import org.apache.http.ParseException;
-import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.InputStreamEntity;
 import org.apache.http.entity.mime.MultipartEntity;
 import org.apache.http.entity.mime.MultipartEntityBuilder;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.util.EntityUtils;
-import org.apache.http.entity.mime.HttpMultipartMode; 
-import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.entity.mime.content.InputStreamBody;
 import org.apache.http.entity.mime.content.StringBody;
 
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.Parcel;
 import android.provider.MediaStore;
-import android.app.Activity;
 import android.app.AlertDialog;
-import android.app.FragmentManager;
 import android.app.ListActivity;
 import android.app.LoaderManager;
 import android.app.LoaderManager.LoaderCallbacks;
@@ -39,19 +25,12 @@ import android.app.ProgressDialog;
 import android.content.CursorLoader;
 import android.content.Intent;
 import android.content.Loader;
-import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
-import android.content.pm.ProviderInfo;
 import android.database.Cursor;
-import android.support.v4.widget.CursorAdapter;
 import android.util.Log;
 import android.view.Menu;
 import android.view.View;
-import android.webkit.MimeTypeMap;
-import android.widget.ArrayAdapter;
 import android.widget.ListView;
 import android.widget.SimpleCursorAdapter;
-import android.widget.Toast;
 
 public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor> {
 	public static final String LOG_TAG = "slice";
@@ -59,7 +38,6 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 	private static CursorLoader CurLoader;
 	private static SimpleCursorAdapter mAdapter;
 	private Uri mediaContentUri;
-	private HttpClient httpc;
 	protected static ProgressDialog pd;
 	
 	@Override
@@ -79,8 +57,6 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 		
 		mediaContentUri = MediaStore.Files.getContentUri("external");
 		LM = getLoaderManager();
-		httpc = new DefaultHttpClient();
-
 		
 		mAdapter = new SimpleCursorAdapter(this,
 				android.R.layout.simple_list_item_1, 
@@ -128,9 +104,6 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
     	    String uploadedUrl = "";
     	    try {
 				MultipartEntityBuilder entity = MultipartEntityBuilder.create();
-//				entity.setMode(HttpMultipartMode.BROWSER_COMPATIBLE);
-//				httppost.addHeader("Content-Type", getContentResolver().getType(contentUri[0]));
-				
 				uploadedUrl = Integer.toHexString(r.hashCode());
 						
 				entity.addPart("file", 
@@ -140,7 +113,13 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 								)
 				);
 				
-				Cursor cursor = getContentResolver().query(contentUri[0], new String[] { android.provider.MediaStore.Images.ImageColumns.DATA }, null, null, null);
+				Cursor cursor = getContentResolver().query(
+						contentUri[0], 
+						new String[] { android.provider.MediaStore.Images.ImageColumns.DATA }, 
+						null, 
+						null, 
+						null);
+				
                 cursor.moveToFirst();   
                 entity.addPart("fullpath", 
                 		new StringBody(
@@ -159,6 +138,7 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 
 				httppost.setEntity(entity.build());
 				response = httpclient.execute(httppost);
+				
     	    } catch (Exception e) {
     	    	e.printStackTrace();
     	    	Log.e(MainActivity.LOG_TAG, "error :(");
@@ -172,13 +152,11 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
 	    	    		return SLICE_URL + uploadedUrl;
 
 				} catch (Exception e) {
-					// TODO Auto-generated catch block
 					e.printStackTrace();
 				}
     	    }
     	    
     	    return SLICE_URL;
-    	    	
         }
 
         @Override
@@ -194,7 +172,7 @@ public class MainActivity extends ListActivity implements LoaderCallbacks<Cursor
         				// set title
         			dBuilder.setTitle("Uh Oh");
         				// set dialog message
-        			dBuilder.setMessage("There was a problem with your slice, your file may be too bPress Back to close.");
+        			dBuilder.setMessage("There was a problem with your slice, your file may be too large(we're upgrading our hosting soon!). Press Back to close.");
         			dBuilder.create().show();
         		} else {
 		        	Intent sendIntent = new Intent(Intent.ACTION_VIEW);
