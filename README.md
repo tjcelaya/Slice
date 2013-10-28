@@ -7,5 +7,5 @@ Additional exploratory but uncommitted code courtesy of Anna Sumner and Kelley K
 
 Coming Soon
 ---------
-Set expiration on slices
-Password protect slices
+  - Set expiration on slices
+  - Password protect slices
